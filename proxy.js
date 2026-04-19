@@ -149,7 +149,7 @@ app.get('/refresh', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(3333, () => {
+app.listen(process.env.PORT || 3333, () => {
   console.log('Proxy Zendesk activo en http://localhost:3333');
   console.log('Filtro: excluye tickets con tag "closed_by_merge"');
   console.log('Endpoints: /tickets /metrics /all /sample /health /refresh');
