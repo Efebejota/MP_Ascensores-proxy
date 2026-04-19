@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>MP Ascensores - KPI Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f5f7; display: flex; height: 100vh; overflow: hidden; font-size: 13px; color: #1a1a2e; }
+
+/* SIDEBAR */
+#sidebar { width: 215px; min-width: 215px; background: #1a2744; color: #c8d0e0; display: flex; flex-direction: column; overflow-y: auto; }
+.sidebar-logo { padding: 16px; border-bottom: 1px solid #2d3e5e; }
+.sidebar-logo .brand { font-size: 17px; font-weight: 700; color: #fff; }
+.sidebar-logo .brand span { color: #4e9af1; }
+.sidebar-logo .sub { font-size: 9px; color: #8899bb; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+.nav-section { padding: 12px 0 2px; }
+.nav-label { font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #5a6a88; padding: 0 14px 5px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; color: #b0bcd4; font-size: 12px; transition: background 0.15s; border-left: 3px solid transparent; white-space: nowrap; }
+.nav-item:hover { background: #243258; color: #e0e8f5; }
+.nav-item.active { background: #1e3a6e; color: #fff; border-left-color: #4e9af1; }
+.nav-icon { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; }
+.nav-badge { margin-left: auto; background: #3a5080; color: #8899bb; font-size: 9px; padding: 1px 6px; border-radius: 8px; }
+
+/* MAIN */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+#topbar { background: #fff; border-bottom: 1px solid #e0e4ec; padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.topbar-title h1 { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+.topbar-title p { font-size: 10px; color: #8899bb; margin-top: 1px; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.cache-info { font-size: 10px; color: #8899bb; }
+.btn-refresh { background: #1e3a6e; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.btn-refresh:hover { background: #2a50a0; }
+.btn-force { background: #fff; color: #4e6080; border: 1px solid #dde3ee; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.btn-force:hover { background: #eef2f8; }
+
+#content { flex: 1; overflow-y: auto; padding: 18px 20px; }
+
+/* LOADING */
+#loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; gap: 14px; }
+.spinner { width: 32px; height: 32px; border: 3px solid #e0e4ec; border-top-color: #1e3a6e; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* SECTIONS */
+.section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1e3a6e; }
+.section-header h2 { font-size: 13px; font-weight: 600; color: #1a1a2e; }
+.section-gap { margin-bottom: 24px; }
+.info-bar { background: #eef2f8; border-radius: 6px; padding: 7px 12px; font-size: 11px; color: #4e6080; margin-bottom: 16px; }
+.info-bar strong { color: #1e3a6e; }
+
+/* KPI CARDS */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.kpi-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.kpi-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.kpi-card { background: #fff; border-radius: 8px; padding: 14px 16px; border-top: 3px solid #ccc; }
+.kpi-card.blue { border-top-color: #1e3a6e; } .kpi-card.green { border-top-color: #27ae60; }
+.kpi-card.purple { border-top-color: #8e44ad; } .kpi-card.red { border-top-color: #e74c3c; }
+.kpi-card.orange { border-top-color: #e67e22; }
+.kpi-label { font-size: 9px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #8899bb; margin-bottom: 6px; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.kpi-card.blue .kpi-value { color: #1e3a6e; } .kpi-card.green .kpi-value { color: #27ae60; }
+.kpi-card.purple .kpi-value { color: #8e44ad; } .kpi-card.red .kpi-value { color: #e74c3c; }
+.kpi-card.orange .kpi-value { color: #e67e22; }
+.kpi-sub { font-size: 10px; color: #8899bb; line-height: 1.4; }
+.up { color: #27ae60; font-weight: 600; } .down { color: #e74c3c; font-weight: 600; }
+
+/* TABLES */
+.table-wrap { background: #fff; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: #eef2f8; }
+th { padding: 9px 12px; text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #4e6080; border-bottom: 1px solid #dde3ee; white-space: nowrap; }
+th.right { text-align: right; } td { padding: 9px 12px; border-bottom: 1px solid #f0f2f7; font-size: 12px; color: #2a3550; }
+td.right { text-align: right; } tbody tr:last-child td { border-bottom: none; } tbody tr:hover { background: #f8fafd; }
+.td-green { color: #27ae60; font-weight: 600; } .td-red { color: #e74c3c; font-weight: 600; }
+.td-blue { color: #1e3a6e; font-weight: 600; } .td-purple { color: #8e44ad; font-weight: 600; }
+.td-gray { color: #8899bb; } .td-orange { color: #e67e22; font-weight: 600; }
+
+/* CHARTS */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+.chart-card { background: #fff; border-radius: 8px; padding: 16px; }
+.chart-title { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #8899bb; margin-bottom: 12px; }
+.chart-container { position: relative; height: 190px; }
+
+/* OBJETIVO CARD */
+.obj-row { display: flex; align-items: center; gap: 0; background: #fff; border-bottom: 1px solid #f0f2f7; padding: 10px 14px; }
+.obj-row:last-child { border-bottom: none; }
+.obj-name { flex: 2; font-size: 12px; color: #2a3550; }
+.obj-val { flex: 1; font-size: 13px; font-weight: 700; text-align: right; color: #1e3a6e; }
+.obj-min,.obj-target,.obj-max { flex: 0.7; font-size: 11px; text-align: right; color: #8899bb; }
+.obj-status { flex: 1; text-align: right; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.pill-green { background: #e8f8f0; color: #27ae60; }
+.pill-orange { background: #fef3e6; color: #e67e22; }
+.pill-red { background: #fdecea; color: #e74c3c; }
+
+#error-box { background: #fdecea; border: 1px solid #f5c6cb; border-radius: 8px; padding: 14px 18px; color: #c0392b; font-size: 13px; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand"><span>MP</span> Ascensores</div>
+    <div class="sub">KPI Dashboard</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Tickets</div>
+    <div class="nav-item active" onclick="nav(this,'tickets-mes')"><span class="nav-icon">📋</span> Mes Actual</div>
+    <div class="nav-item" onclick="nav(this,'tickets-acum')"><span class="nav-icon">📊</span> Acumulado Anual</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Tiempos</div>
+    <div class="nav-item" onclick="nav(this,'tiempos-mes')"><span class="nav-icon">⏱️</span> Mes Actual</div>
+    <div class="nav-item" onclick="nav(this,'tiempos-acum')"><span class="nav-icon">⏳</span> Acumulado</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">SLAs</div>
+    <div class="nav-item" onclick="nav(this,'slas-mes')"><span class="nav-icon">✅</span> Mes Actual</div>
+    <div class="nav-item" onclick="nav(this,'slas-acum')"><span class="nav-icon">📋</span> Acumulado</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Último Mes</div>
+    <div class="nav-item" onclick="nav(this,'ult-tickets')"><span class="nav-icon">📋</span> Tickets</div>
+    <div class="nav-item" onclick="nav(this,'ult-tiempos')"><span class="nav-icon">⏱️</span> Tiempos</div>
+    <div class="nav-item" onclick="nav(this,'ult-slas')"><span class="nav-icon">✅</span> SLAs</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Análisis</div>
+    <div class="nav-item" onclick="nav(this,'por-canal')"><span class="nav-icon">📡</span> Por Canal</div>
+    <div class="nav-item" onclick="nav(this,'por-tipo')"><span class="nav-icon">🏷️</span> Por Tipo Cliente</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Dirección</div>
+    <div class="nav-item" onclick="nav(this,'direccion')"><span class="nav-icon">📈</span> Datos Dirección</div>
+  </div>
+</nav>
+
+<div id="main">
+  <div id="topbar">
+    <div class="topbar-title">
+      <h1 id="view-title">Volumen de Tickets — Mes Actual</h1>
+      <p id="view-subtitle">Cargando...</p>
+    </div>
+    <div class="topbar-right">
+      <span class="cache-info" id="cache-info"></span>
+      <button class="btn-force" onclick="forceRefresh()">↺ Recargar Zendesk</button>
+      <button class="btn-refresh" onclick="renderDashboard()">↻ Actualizar</button>
+    </div>
+  </div>
+  <div id="content">
+    <div id="loading"><div class="spinner"></div><p style="color:#8899bb">Conectando con Zendesk...</p><p style="font-size:11px;color:#4e9af1">La primera carga puede tardar 1-2 minutos (tickets + métricas)</p></div>
+    <div id="dashboard" style="display:none"></div>
+    <div id="error-box" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const PROXY = 'http://localhost:3333';
+const TIPO_FIELD = 23076303407645;
+const CANAL_FIELD = 19083748389789;
+const STD_DIA = 48, STD_DIAS_MES = 20, STD_MES = 960, STD_ANUAL = 11520;
+
+// SLA targets por tipo (minutos, 1ª respuesta + sucesivas)
+const SLA_TARGET = { 'Tipo 1': 15, 'Tipo 2': 25, 'Tipo 3': 150, 'Sin Tipo': 150 };
+// Objetivos
+const OBJETIVOS = [
+  { name: '% SLA T1+T2 (1ª resp + sucesivas)', min: 50, target: 62.5, max: 75, unit: '%' },
+  { name: 'Tiempo medio T1 (1ª resp + sucesivas)', min: 13, target: 10, max: 8, unit: 'min', lower_better: true }
+];
+
+let allTickets = [], allMetrics = [], metricsById = {};
+let currentView = 'tickets-mes';
+
+// HELPERS
+const gm = s => s.toISOString().slice(0,7);
+const now = () => new Date();
+const curMonth = () => gm(now());
+const prevMonth = () => { const d=new Date(); d.setMonth(d.getMonth()-1); return gm(d); };
+const prevYearMonth = () => { const d=new Date(); d.setFullYear(d.getFullYear()-1); return gm(d); };
+const curYear = () => now().getFullYear().toString();
+const prevYear = () => (now().getFullYear()-1).toString();
+
+const byMonth = (arr, m) => arr.filter(t=>(t.created_at||'').startsWith(m));
+const byYear = (arr, y) => arr.filter(t=>(t.created_at||'').startsWith(y));
+const resolved = t => ['solved','closed'].includes(t.status);
+
+function getTipo(t) {
+  const f=(t.custom_fields||[]).find(x=>x.id===TIPO_FIELD);
+  if(!f||!f.value) return 'Sin Tipo';
+  if(f.value==='tipo_cliente_1') return 'Tipo 1';
+  if(f.value==='tipo_cliente_2') return 'Tipo 2';
+  if(f.value==='tipo_cliente_3') return 'Tipo 3';
+  return 'Sin Tipo';
+}
+
+function getCanal(t) {
+  const f=(t.custom_fields||[]).find(x=>x.id===CANAL_FIELD);
+  if(!f||!f.value) return t.via?.channel||'Otro';
+  const v=f.value;
+  if(v==='canal_correo') return 'Email';
+  if(v==='canal_whatsapp') return 'WhatsApp';
+  if(v==='canal_telefono') return 'Teléfono';
+  if(v==='canal_formulario') return 'Formulario';
+  return v.replace('canal_','');
+}
+
+// Tiempo de primera respuesta en minutos
+function getFirstReplyMin(t) {
+  const m = metricsById[t.id];
+  if(!m) return null;
+  const secs = m.reply_time_in_seconds?.calendar;
+  return secs != null ? Math.round(secs/60) : null;
+}
+
+// Tiempo total resolución en minutos
+function getResolutionMin(t) {
+  const m = metricsById[t.id];
+  if(!m) return null;
+  const secs = m.full_resolution_time_in_seconds?.calendar;
+  return secs != null ? Math.round(secs/60) : null;
+}
+
+// SLA cumplido: primera respuesta <= target del tipo
+function slaCumplido(t) {
+  const mins = getFirstReplyMin(t);
+  if(mins === null) return null;
+  const target = SLA_TARGET[getTipo(t)] || 150;
+  return mins <= target;
+}
+
+// Arrow helpers
+const arr = v => v>0?'<span class="up">▲</span>':v<0?'<span class="down">▼</span>':'';
+const pctCls = v => v>=0?'td-green':'td-red';
+const pctStr = v => arr(v)+' '+Math.abs(v).toFixed(1)+'%';
+const fmtMin = m => m!=null ? m.toFixed(1)+' min' : '—';
+const avg = arr => arr.length>0 ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+
+function nav(el, view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active');
+  renderDashboard();
+}
+
+async function forceRefresh() {
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('error-box').style.display='none';
+  try {
+    await fetch(PROXY+'/refresh');
+    await loadData();
+  } catch(e) { showError(e.message); }
+}
+
+async function loadData() {
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('error-box').style.display='none';
+
+  try {
+    const [tr, mr] = await Promise.all([fetch(PROXY+'/tickets'), fetch(PROXY+'/metrics')]);
+    if(!tr.ok||!mr.ok) throw new Error('Error HTTP');
+    const [td, md] = await Promise.all([tr.json(), mr.json()]);
+
+    allTickets = td.tickets||[];
+    allMetrics = md.metrics||[];
+    metricsById = {};
+    allMetrics.forEach(m=>{ metricsById[m.ticket_id]=m; });
+
+    if(td.cachedAt) {
+      const age = Math.round((Date.now()-td.cachedAt)/1000);
+      document.getElementById('cache-info').textContent = allTickets.length+' tickets · '+allMetrics.length+' métricas · caché '+age+'s';
+    }
+    renderDashboard();
+  } catch(e) { showError(e.message); }
+}
+
+function showError(msg) {
+  document.getElementById('loading').style.display='none';
+  document.getElementById('dashboard').style.display='none';
+  const eb=document.getElementById('error-box');
+  eb.style.display='block';
+  eb.innerHTML='<strong>Error de conexión</strong><br>Asegúrate de que el proxy está corriendo en localhost:3333<br><small>'+msg+'</small>';
+}
+
+function renderDashboard() {
+  document.getElementById('loading').style.display='none';
+  const dash=document.getElementById('dashboard');
+  dash.style.display='block';
+  // Destruir charts
+  Object.values(Chart.instances||{}).forEach(c=>c.destroy());
+
+  const d=now();
+  const mNames={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const m=parseInt(curMonth().slice(5,7));
+  document.getElementById('view-subtitle').textContent=`${mNames[m]} ${curYear()} | ${d.toLocaleDateString('es-ES')} ${d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}`;
+
+  const views = {
+    'tickets-mes': renderTicketsMes,
+    'tickets-acum': renderTicketsAcum,
+    'tiempos-mes': renderTiemposMes,
+    'tiempos-acum': renderTiemposAcum,
+    'slas-mes': renderSlasMes,
+    'slas-acum': renderSlasAcum,
+    'ult-tickets': renderUltTickets,
+    'ult-tiempos': renderUltTiempos,
+    'ult-slas': renderUltSlas,
+    'por-canal': renderPorCanal,
+    'por-tipo': renderPorTipo,
+    'direccion': renderDireccion,
+  };
+  (views[currentView]||renderTicketsMes)(dash);
+}
+
+// ─── TICKETS MES ACTUAL ───────────────────────────────────────────────────────
+function renderTicketsMes(dash) {
+  document.getElementById('view-title').textContent='Volumen de Tickets — Mes Actual';
+  const cm=curMonth(), pm=prevMonth(), pym=prevYearMonth();
+  const cur=byMonth(allTickets,cm), prev=byMonth(allTickets,pm), prevY=byMonth(allTickets,pym);
+
+  const c=cur.length, p=prev.length, py=prevY.length;
+  const cr=cur.filter(resolved).length, pr=prev.filter(resolved).length, pyr=prevY.filter(resolved).length;
+
+  const diaActual=now().getDate();
+  const diasLab=Math.max(1,Math.round(diaActual*STD_DIAS_MES/30));
+  const stdParcial=STD_DIA*diasLab;
+  const avg_dia=(c/diasLab).toFixed(1);
+  const desv=c-stdParcial;
+
+  const pCA=p>0?(c-p)/p*100:0, pCY=py>0?(c-py)/py*100:0;
+  const pRA=pr>0?(cr-pr)/pr*100:0, pRY=pyr>0?(cr-pyr)/pyr*100:0;
+
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const byT={};
+  tipos.forEach(t=>{byT[t]={c:0,p:0,py:0};});
+  cur.forEach(t=>{const tp=getTipo(t);if(byT[tp])byT[tp].c++;});
+  prev.forEach(t=>{const tp=getTipo(t);if(byT[tp])byT[tp].p++;});
+  prevY.forEach(t=>{const tp=getTipo(t);if(byT[tp])byT[tp].py++;});
+
+  const daily={};
+  cur.forEach(t=>{const d=t.created_at.slice(8,10);daily[d]=(daily[d]||0)+1;});
+  const days=Object.keys(daily).sort();
+
+  const stCnt={};
+  cur.forEach(t=>{stCnt[t.status]=(stCnt[t.status]||0)+1;});
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 <strong>${cm}</strong> &nbsp;·&nbsp; Std mensual: <strong>${STD_MES}</strong> (48×20 días lab.) &nbsp;·&nbsp; Std parcial (~${diasLab} días lab.): <strong>${stdParcial}</strong></div>
+
+    <div class="section-header section-gap"><span>📊</span><h2>Volumen de Tickets</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">Creados</div><div class="kpi-value">${c}</div>
+        <div class="kpi-sub">Std: ${stdParcial} ${py>0?`<span class="${pCY>=0?'up':'down'}">${arr(pCY)} ${Math.abs(pCY).toFixed(1)}pp vs año ant.</span>`:''}</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resueltos</div><div class="kpi-value">${cr}</div>
+        <div class="kpi-sub">Std: ${stdParcial} ${pyr>0?`<span class="${pRY>=0?'up':'down'}">${arr(pRY)} ${Math.abs(pRY).toFixed(1)}pp vs año ant.</span>`:''}</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Avg Diario</div><div class="kpi-value">${avg_dia}</div>
+        <div class="kpi-sub">Std: ${STD_DIA}/día lab.</div></div>
+      <div class="kpi-card ${desv>=0?'orange':'red'}"><div class="kpi-label">Desviación</div><div class="kpi-value">${desv>0?'+':''}${desv}</div>
+        <div class="kpi-sub">vs std parcial</div></div>
+    </div>
+
+    <div class="section-header"><span>📋</span><h2>Detalle Comparativo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Métrica</th><th class="right">Mes Actual</th><th class="right">Std Mes</th><th class="right">Desviación</th><th class="right">Mes Anterior</th><th class="right">% vs Ant.</th><th class="right">Mismo Per. Año Ant.</th><th class="right">% vs Año Ant.</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Creados</strong></td><td class="right">${c}</td><td class="right td-gray">${STD_MES}</td>
+          <td class="right ${(c-STD_MES)<0?'td-red':'td-green'}">${c-STD_MES>0?'+':''}${c-STD_MES}</td>
+          <td class="right">${p}</td><td class="right ${pctCls(pCA)}">${pctStr(pCA)}</td>
+          <td class="right">${py||'—'}</td><td class="right ${py>0?pctCls(pCY):'td-gray'}">${py>0?pctStr(pCY):'Sin datos'}</td></tr>
+        <tr><td><strong>Resueltos</strong></td><td class="right">${cr}</td><td class="right td-gray">${STD_MES}</td>
+          <td class="right ${(cr-STD_MES)<0?'td-red':'td-green'}">${cr-STD_MES>0?'+':''}${cr-STD_MES}</td>
+          <td class="right">${pr}</td><td class="right ${pctCls(pRA)}">${pctStr(pRA)}</td>
+          <td class="right">${pyr||'—'}</td><td class="right ${pyr>0?pctCls(pRY):'td-gray'}">${pyr>0?pctStr(pRY):'Sin datos'}</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="section-header"><span>🏷️</span><h2>Tickets por Tipo de Cliente</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Mes Actual</th><th class="right">% Total</th><th class="right">Mes Anterior</th><th class="right">% vs Ant.</th><th class="right">Mismo Per. Año Ant.</th><th class="right">% vs Año Ant.</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const {c:tc,p:tp2,py:tpy}=byT[tp];
+        const pct=c>0?(tc/c*100).toFixed(1):'0.0';
+        const va=tp2>0?(tc-tp2)/tp2*100:0, vy=tpy>0?(tc-tpy)/tpy*100:0;
+        return `<tr><td><strong>${tp}</strong></td><td class="right td-blue">${tc}</td><td class="right">${pct}%</td>
+          <td class="right">${tp2}</td><td class="right ${pctCls(va)}">${pctStr(va)}</td>
+          <td class="right">${tpy||'—'}</td><td class="right ${tpy>0?pctCls(vy):'td-gray'}">${tpy>0?pctStr(vy):'Sin datos'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Evolución Diaria</div><div class="chart-container"><canvas id="ch-daily"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Distribución por Estado</div><div class="chart-container"><canvas id="ch-status"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-daily'),{type:'bar',data:{labels:days.map(d=>parseInt(d)),datasets:[{label:'Tickets',data:days.map(d=>daily[d]),backgroundColor:'#1e3a6e',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+
+  const sLbl={open:'Abierto',pending:'Pendiente',solved:'Resuelto',closed:'Cerrado',new:'Nuevo',hold:'En espera'};
+  const sCol={open:'#1e3a6e',pending:'#e67e22',solved:'#27ae60',closed:'#8899bb',new:'#8e44ad',hold:'#e74c3c'};
+  const sK=Object.keys(stCnt);
+  new Chart(document.getElementById('ch-status'),{type:'doughnut',data:{labels:sK.map(k=>sLbl[k]||k),datasets:[{data:sK.map(k=>stCnt[k]),backgroundColor:sK.map(k=>sCol[k]||'#ccc'),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+}
+
+// ─── TICKETS ACUMULADO ────────────────────────────────────────────────────────
+function renderTicketsAcum(dash) {
+  document.getElementById('view-title').textContent='Volumen de Tickets — Acumulado Anual';
+  const cy=curYear(), py=prevYear();
+  const mesActual=parseInt(curMonth().slice(5,7));
+  const ytd=byYear(allTickets,cy), ytdPY=byYear(allTickets,py);
+
+  const c=ytd.length, cp=ytdPY.length;
+  const r=ytd.filter(resolved).length, rp=ytdPY.filter(resolved).length;
+  const stdYTD=STD_MES*mesActual, desv=c-stdYTD;
+  const proy=Math.round(c/mesActual*12);
+  const pC=cp>0?(c-cp)/cp*100:0, pR=rp>0?(r-rp)/rp*100:0;
+
+  const byM={};
+  for(let m=1;m<=mesActual;m++){const ms=cy+'-'+String(m).padStart(2,'0');byM[ms]={c:0,p:0};}
+  ytd.forEach(t=>{const ms=t.created_at.slice(0,7);if(byM[ms])byM[ms].c++;});
+  ytdPY.forEach(t=>{const ms=t.created_at.slice(0,7);const eq=cy+ms.slice(4);if(byM[eq])byM[eq].p++;});
+
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const mK=Object.keys(byM).sort();
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Ene–${mN[mesActual]} ${cy} &nbsp;·&nbsp; Std YTD: <strong>${stdYTD.toLocaleString()}</strong> (${STD_MES}×${mesActual} meses) &nbsp;·&nbsp; Std anual: <strong>${STD_ANUAL.toLocaleString()}</strong></div>
+    <div class="section-header section-gap"><span>📅</span><h2>Acumulado ${cy}</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">Creados YTD</div><div class="kpi-value">${c.toLocaleString()}</div><div class="kpi-sub">Std YTD: ${stdYTD.toLocaleString()} <span class="${pC>=0?'up':'down'}">${arr(pC)} ${Math.abs(pC).toFixed(1)}pp</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resueltos YTD</div><div class="kpi-value">${r.toLocaleString()}</div><div class="kpi-sub">Std YTD: ${stdYTD.toLocaleString()} <span class="${pR>=0?'up':'down'}">${arr(pR)} ${Math.abs(pR).toFixed(1)}pp</span></div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Proyección Anual</div><div class="kpi-value">${proy.toLocaleString()}</div><div class="kpi-sub">Std anual: ${STD_ANUAL.toLocaleString()}</div></div>
+      <div class="kpi-card ${desv>=0?'orange':'red'}"><div class="kpi-label">Desv. vs Std YTD</div><div class="kpi-value">${desv>0?'+':''}${desv}</div><div class="kpi-sub">vs ${stdYTD.toLocaleString()} esperados</div></div>
+    </div>
+    <div class="section-header"><span>📋</span><h2>Detalle Acumulado</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Métrica</th><th class="right">YTD</th><th class="right">Std YTD</th><th class="right">Desv.</th><th class="right">Año Ant.</th><th class="right">%</th><th class="right">Proyección</th><th class="right">Std Anual</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Creados</strong></td><td class="right">${c.toLocaleString()}</td><td class="right td-gray">${stdYTD.toLocaleString()}</td>
+          <td class="right ${desv<0?'td-red':'td-green'}">${desv>0?'+':''}${desv}</td>
+          <td class="right">${cp>0?cp.toLocaleString():'—'}</td><td class="right ${cp>0?pctCls(pC):'td-gray'}">${cp>0?pctStr(pC):'Sin datos'}</td>
+          <td class="right td-purple">${proy.toLocaleString()}</td><td class="right td-gray">${STD_ANUAL.toLocaleString()}</td></tr>
+        <tr><td><strong>Resueltos</strong></td><td class="right">${r.toLocaleString()}</td><td class="right td-gray">${stdYTD.toLocaleString()}</td>
+          <td class="right ${(r-stdYTD)<0?'td-red':'td-green'}">${r-stdYTD>0?'+':''}${r-stdYTD}</td>
+          <td class="right">${rp>0?rp.toLocaleString():'—'}</td><td class="right ${rp>0?pctCls(pR):'td-gray'}">${rp>0?pctStr(pR):'Sin datos'}</td>
+          <td class="right td-purple">${Math.round(r/mesActual*12).toLocaleString()}</td><td class="right td-gray">${STD_ANUAL.toLocaleString()}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Evolución Mensual — Creados vs Año Anterior</div><div class="chart-container"><canvas id="ch-evo"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Creados vs Estándar Mensual (${STD_MES})</div><div class="chart-container"><canvas id="ch-std"></canvas></div></div>
+    </div>`;
+
+  const lbl=mK.map(k=>mN[parseInt(k.slice(5,7))]);
+  const cD=mK.map(k=>byM[k].c), pD=mK.map(k=>byM[k].p);
+  new Chart(document.getElementById('ch-evo'),{type:'line',data:{labels:lbl,datasets:[{label:cy,data:cD,borderColor:'#1e3a6e',backgroundColor:'rgba(30,58,110,0.1)',tension:0.3,fill:true,pointRadius:4},{label:py,data:pD,borderColor:'#8899bb',borderDash:[5,3],backgroundColor:'transparent',tension:0.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+  new Chart(document.getElementById('ch-std'),{type:'bar',data:{labels:lbl,datasets:[{label:'Creados',data:cD,backgroundColor:cD.map(v=>v>=STD_MES?'#27ae60':'#e74c3c'),borderRadius:3},{label:'Std '+STD_MES,data:mK.map(()=>STD_MES),type:'line',borderColor:'#1e3a6e',borderDash:[4,2],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+}
+
+// ─── TIEMPOS MES ACTUAL ───────────────────────────────────────────────────────
+function renderTiemposMes(dash) {
+  document.getElementById('view-title').textContent='Tiempos — Mes Actual';
+  const cm=curMonth();
+  const cur=byMonth(allTickets,cm).filter(t=>metricsById[t.id]);
+
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tipoData={};
+  tipos.forEach(tp=>{tipoData[tp]={firstReply:[],resolution:[],count:0};});
+
+  cur.forEach(t=>{
+    const tp=getTipo(t), fr=getFirstReplyMin(t), res=getResolutionMin(t);
+    if(tipoData[tp]){
+      tipoData[tp].count++;
+      if(fr!=null) tipoData[tp].firstReply.push(fr);
+      if(res!=null) tipoData[tp].resolution.push(res);
+    }
+  });
+
+  const allFR=cur.map(getFirstReplyMin).filter(x=>x!=null);
+  const allRes=cur.map(getResolutionMin).filter(x=>x!=null);
+  const avgFR=avg(allFR), avgRes=avg(allRes);
+
+  // T1 y T2 combinados
+  const t1FR=tipoData['Tipo 1'].firstReply, t2FR=tipoData['Tipo 2'].firstReply;
+  const avgT1=avg(t1FR), avgT2=avg(t2FR);
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 <strong>${cm}</strong> &nbsp;·&nbsp; Tickets con métricas: <strong>${cur.length}</strong> de ${byMonth(allTickets,cm).length}</div>
+    <div class="section-header section-gap"><span>⏱️</span><h2>Tiempos — Mes Actual</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">Tiempo Medio T1 (min)</div><div class="kpi-value">${avgT1!=null?avgT1.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Tiempo Medio T2 (min)</div><div class="kpi-value">${avgT2!=null?avgT2.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resolución T1 (min)</div><div class="kpi-value">${avg(tipoData['Tipo 1'].resolution)!=null?avg(tipoData['Tipo 1'].resolution).toFixed(1):'—'}</div><div class="kpi-sub">Tiempo total medio</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Total Tickets</div><div class="kpi-value">${cur.length}</div><div class="kpi-sub">Con métricas disponibles</div></div>
+    </div>
+
+    <div class="section-header"><span>📋</span><h2>1ª Respuesta + Sucesivas (min) por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Tickets</th><th class="right">Tiempo Medio (min)</th><th class="right">Target SLA</th><th class="right">% Cumple SLA</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoData[tp], a=avg(d.firstReply), tgt=SLA_TARGET[tp];
+        const cumple=d.firstReply.filter(v=>v<=tgt).length;
+        const pct=d.firstReply.length>0?(cumple/d.firstReply.length*100).toFixed(1):'—';
+        const cls=a!=null&&a<=tgt?'td-green':'td-red';
+        return `<tr><td><strong>${tp}</strong></td><td class="right">${d.count}</td>
+          <td class="right ${cls}">${a!=null?a.toFixed(1):' —'}</td>
+          <td class="right td-gray">${tgt} min</td>
+          <td class="right ${pct!=='—'?(parseFloat(pct)>=50?'td-green':'td-red'):'td-gray'}">${pct!=='—'?pct+'%':'—'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="section-header"><span>📋</span><h2>Resolución Total por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Tickets resueltos</th><th class="right">Resol. Media (min)</th><th class="right">Resol. Media (h)</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoData[tp], a=avg(d.resolution);
+        return `<tr><td><strong>${tp}</strong></td><td class="right">${d.resolution.length}</td>
+          <td class="right td-blue">${a!=null?a.toFixed(1):'—'}</td>
+          <td class="right td-gray">${a!=null?(a/60).toFixed(1)+'h':'—'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">1ª Respuesta por Tipo (min)</div><div class="chart-container"><canvas id="ch-fr-tipo"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Resolución por Tipo (min)</div><div class="chart-container"><canvas id="ch-res-tipo"></canvas></div></div>
+    </div>`;
+
+  const tColors=['#1e3a6e','#27ae60','#8e44ad','#8899bb'];
+  new Chart(document.getElementById('ch-fr-tipo'),{type:'bar',data:{labels:tipos,datasets:[{label:'T. medio 1ª resp (min)',data:tipos.map(tp=>avg(tipoData[tp].firstReply)),backgroundColor:tipos.map((tp,i)=>{const a=avg(tipoData[tp].firstReply);return a!=null&&a<=SLA_TARGET[tp]?'#27ae60':'#e74c3c';}),borderRadius:4},{label:'Target SLA',data:tipos.map(tp=>SLA_TARGET[tp]),type:'line',borderColor:'#1e3a6e',borderDash:[4,2],pointRadius:4,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+  new Chart(document.getElementById('ch-res-tipo'),{type:'bar',data:{labels:tipos,datasets:[{label:'Resolución media (min)',data:tipos.map(tp=>avg(tipoData[tp].resolution)),backgroundColor:tColors,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+}
+
+// ─── TIEMPOS ACUMULADO ────────────────────────────────────────────────────────
+function renderTiemposAcum(dash) {
+  document.getElementById('view-title').textContent='Tiempos — Acumulado Anual';
+  const cy=curYear(), mesActual=parseInt(curMonth().slice(5,7));
+  const ytd=byYear(allTickets,cy).filter(t=>metricsById[t.id]);
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tColors=['#1e3a6e','#27ae60','#8e44ad','#8899bb'];
+
+  const tipoData={};
+  tipos.forEach(tp=>{tipoData[tp]={firstReply:[],resolution:[]};});
+  ytd.forEach(t=>{
+    const tp=getTipo(t), fr=getFirstReplyMin(t), res=getResolutionMin(t);
+    if(tipoData[tp]){if(fr!=null)tipoData[tp].firstReply.push(fr);if(res!=null)tipoData[tp].resolution.push(res);}
+  });
+
+  const t1=avg(tipoData['Tipo 1'].firstReply), t2=avg(tipoData['Tipo 2'].firstReply);
+  const resT1=avg(tipoData['Tipo 1'].resolution);
+
+  // Evolución mensual de tiempo medio
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const monthFR={};
+  for(let m=1;m<=mesActual;m++){const ms=cy+'-'+String(m).padStart(2,'0');monthFR[ms]=[];}
+  ytd.forEach(t=>{const ms=t.created_at.slice(0,7);const fr=getFirstReplyMin(t);if(monthFR[ms]&&fr!=null)monthFR[ms].push(fr);});
+  const mK=Object.keys(monthFR).sort();
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Acumulado <strong>${cy}</strong> &nbsp;·&nbsp; Tickets con métricas: <strong>${ytd.length}</strong></div>
+    <div class="section-header section-gap"><span>⏳</span><h2>Tiempos — Acumulado ${cy}</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">Tiempo Medio T1 Acum (min)</div><div class="kpi-value">${t1!=null?t1.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Tiempo Medio T2 Acum (min)</div><div class="kpi-value">${t2!=null?t2.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resolución T1 Acum (min)</div><div class="kpi-value">${resT1!=null?resT1.toFixed(1):'—'}</div><div class="kpi-sub">Tiempo total medio</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Total Tickets</div><div class="kpi-value">${ytd.length}</div><div class="kpi-sub">Con métricas</div></div>
+    </div>
+
+    <div class="section-header"><span>📋</span><h2>1ª Respuesta + Sucesivas Acum (min) por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Tickets</th><th class="right">Tiempo Medio (min)</th><th class="right">Target SLA</th><th class="right">% Cumple SLA</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoData[tp], a=avg(d.firstReply), tgt=SLA_TARGET[tp];
+        const cumple=d.firstReply.filter(v=>v<=tgt).length;
+        const pct=d.firstReply.length>0?(cumple/d.firstReply.length*100).toFixed(1):'—';
+        return `<tr><td><strong>${tp}</strong></td><td class="right">${d.firstReply.length}</td>
+          <td class="right ${a!=null&&a<=tgt?'td-green':'td-red'}">${a!=null?a.toFixed(1):'—'}</td>
+          <td class="right td-gray">${tgt} min</td>
+          <td class="right ${pct!=='—'?(parseFloat(pct)>=50?'td-green':'td-red'):'td-gray'}">${pct!=='—'?pct+'%':'—'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="section-header"><span>📋</span><h2>Resolución Acumulado por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Tickets resueltos</th><th class="right">Resol. Media (min)</th><th class="right">Resol. Media (h)</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoData[tp], a=avg(d.resolution);
+        return `<tr><td><strong>${tp}</strong></td><td class="right">${d.resolution.length}</td>
+          <td class="right td-blue">${a!=null?a.toFixed(1):'—'}</td>
+          <td class="right td-gray">${a!=null?(a/60).toFixed(1)+'h':'—'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Evolución Mensual — 1ª Respuesta T1+T2 (min)</div><div class="chart-container"><canvas id="ch-fr-evo"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Tiempo Medio por Tipo (min)</div><div class="chart-container"><canvas id="ch-tipo-bar"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-fr-evo'),{type:'line',data:{labels:mK.map(k=>mN[parseInt(k.slice(5,7))]),datasets:[{label:'T1 media (min)',data:mK.map(k=>{const ms=byYear(allTickets,cy).filter(t=>t.created_at.startsWith(k));const frs=ms.map(getFirstReplyMin).filter(x=>x!=null&&getTipo(t=>{return t;})!=='skip');const vals=[];ms.forEach(t=>{if(getTipo(t)==='Tipo 1'){const v=getFirstReplyMin(t);if(v!=null)vals.push(v);}});return avg(vals);}),borderColor:'#1e3a6e',tension:0.3,pointRadius:4,fill:false},{label:'T2 media (min)',data:mK.map(k=>{const ms=byYear(allTickets,cy).filter(t=>t.created_at.startsWith(k));const vals=[];ms.forEach(t=>{if(getTipo(t)==='Tipo 2'){const v=getFirstReplyMin(t);if(v!=null)vals.push(v);}});return avg(vals);}),borderColor:'#8e44ad',tension:0.3,pointRadius:4,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10},callback:v=>v+'m'}}}}});
+  new Chart(document.getElementById('ch-tipo-bar'),{type:'bar',data:{labels:tipos,datasets:[{label:'1ª Resp (min)',data:tipos.map(tp=>avg(tipoData[tp].firstReply)),backgroundColor:tipos.map(tp=>{const a=avg(tipoData[tp].firstReply);return a!=null&&a<=SLA_TARGET[tp]?'#27ae60':'#e74c3c';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+}
+
+// ─── SLAs MES ACTUAL ──────────────────────────────────────────────────────────
+function renderSlasMes(dash) {
+  document.getElementById('view-title').textContent='SLAs — Mes Actual';
+  const cm=curMonth();
+  const cur=byMonth(allTickets,cm);
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+
+  const tipoSLA={};
+  tipos.forEach(tp=>{tipoSLA[tp]={total:0,cumple:0,incumple:0,noData:0};});
+
+  cur.forEach(t=>{
+    const tp=getTipo(t), sl=slaCumplido(t);
+    if(tipoSLA[tp]){
+      tipoSLA[tp].total++;
+      if(sl===true)tipoSLA[tp].cumple++;
+      else if(sl===false)tipoSLA[tp].incumple++;
+      else tipoSLA[tp].noData++;
+    }
+  });
+
+  // % SLA T1+T2 combinado
+  const t12=cur.filter(t=>getTipo(t)==='Tipo 1'||getTipo(t)==='Tipo 2');
+  const t12cumple=t12.filter(t=>slaCumplido(t)===true).length;
+  const t12total=t12.filter(t=>slaCumplido(t)!==null).length;
+  const pctT12=t12total>0?(t12cumple/t12total*100):0;
+
+  // Tiempo medio T1
+  const frT1=cur.filter(t=>getTipo(t)==='Tipo 1').map(getFirstReplyMin).filter(x=>x!=null);
+  const avgFrT1=avg(frT1);
+
+  // Estado objetivos
+  function objStatus(val, obj) {
+    if(obj.lower_better) {
+      if(val<=obj.max) return {cls:'pill-green',txt:'✓ Aceptable'};
+      if(val<=obj.target) return {cls:'pill-orange',txt:'⚠ Aceptable'};
+      return {cls:'pill-red',txt:'✗ Fuera de rango'};
+    } else {
+      if(val>=obj.max) return {cls:'pill-green',txt:'✓ Óptimo'};
+      if(val>=obj.target) return {cls:'pill-orange',txt:'⚠ Aceptable'};
+      if(val>=obj.min) return {cls:'pill-orange',txt:'⚠ Mínimo'};
+      return {cls:'pill-red',txt:'✗ Fuera de rango'};
+    }
+  }
+
+  const slaObjVal=[pctT12, avgFrT1||0];
+  const slaObjFmt=[pctT12.toFixed(1)+' %', (avgFrT1||0).toFixed(1)+' min'];
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 <strong>${cm}</strong> &nbsp;·&nbsp; Tickets T1+T2: <strong>${t12total}</strong> con datos SLA</div>
+    <div class="section-header section-gap"><span>✅</span><h2>SLA — Mes Actual</h2></div>
+    <div class="kpi-grid kpi-grid-2">
+      <div class="kpi-card orange"><div class="kpi-label">SLA T1+T2 Combinado %</div><div class="kpi-value">${pctT12.toFixed(1)}%</div><div class="kpi-sub">1ª resp + sucesivas (ponderado)</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Tickets T1+T2</div><div class="kpi-value">${t12total}</div><div class="kpi-sub">Con datos de primera respuesta</div></div>
+    </div>
+
+    <div class="section-header"><span>✅</span><h2>% SLA Cumplido (1ª Respuesta + Sucesivas)</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Target SLA</th><th class="right">Tickets</th><th class="right">Cumplidos</th><th class="right">Incumplidos</th><th class="right">% Cumplimiento</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoSLA[tp], pct=d.total>0?(d.cumple/Math.max(1,d.total-d.noData)*100):0;
+        const cls=pct>=75?'td-green':pct>=50?'td-orange':'td-red';
+        return `<tr><td><strong>${tp}</strong></td><td class="right td-gray">${SLA_TARGET[tp]} min</td>
+          <td class="right">${d.total-d.noData}</td>
+          <td class="right td-green">${d.cumple}</td>
+          <td class="right td-red">${d.incumple}</td>
+          <td class="right ${cls}">${pct.toFixed(1)}%</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="section-header"><span>🎯</span><h2>Objetivos</h2></div>
+    <div class="table-wrap section-gap">
+      <div style="background:#eef2f8;padding:8px 14px;display:grid;grid-template-columns:2fr 1fr 0.7fr 0.7fr 0.7fr 1fr;font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#4e6080;">
+        <span>Objetivo</span><span style="text-align:right">Valor Actual</span><span style="text-align:right">Min</span><span style="text-align:right">Target</span><span style="text-align:right">Max</span><span style="text-align:right">Estado</span>
+      </div>
+      ${OBJETIVOS.map((obj,i)=>{
+        const st=objStatus(slaObjVal[i],obj);
+        return `<div class="obj-row">
+          <span class="obj-name">${obj.name}</span>
+          <span class="obj-val">${slaObjFmt[i]}</span>
+          <span class="obj-min">${obj.min} ${obj.unit}</span>
+          <span class="obj-target">${obj.target} ${obj.unit}</span>
+          <span class="obj-max">${obj.max} ${obj.unit}</span>
+          <span class="obj-status"><span class="pill ${st.cls}">${st.txt}</span></span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">SLA 1ª Respuesta por Tipo</div><div class="chart-container"><canvas id="ch-sla-tipo"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Objetivo SLA T1+T2 vs Target</div><div class="chart-container"><canvas id="ch-sla-obj"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-sla-tipo'),{type:'bar',data:{labels:tipos,datasets:[{label:'Cumplidos',data:tipos.map(tp=>tipoSLA[tp].cumple),backgroundColor:'#27ae60',borderRadius:3},{label:'Incumplidos',data:tipos.map(tp=>tipoSLA[tp].incumple),backgroundColor:'#e74c3c',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+  new Chart(document.getElementById('ch-sla-obj'),{type:'doughnut',data:{labels:['Cumplido','Incumplido'],datasets:[{data:[t12cumple,t12total-t12cumple],backgroundColor:['#27ae60','#e74c3c'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}},title:{display:true,text:pctT12.toFixed(1)+'% cumplimiento',font:{size:16,weight:'bold'},color:'#1e3a6e',padding:{top:10}}}}});
+}
+
+// ─── SLAs ACUMULADO ───────────────────────────────────────────────────────────
+function renderSlasAcum(dash) {
+  document.getElementById('view-title').textContent='SLAs — Acumulado';
+  const cy=curYear(), mesActual=parseInt(curMonth().slice(5,7));
+  const ytd=byYear(allTickets,cy);
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+
+  const tipoSLA={};
+  tipos.forEach(tp=>{tipoSLA[tp]={cumple:0,incumple:0,noData:0};});
+  ytd.forEach(t=>{
+    const tp=getTipo(t), sl=slaCumplido(t);
+    if(tipoSLA[tp]){if(sl===true)tipoSLA[tp].cumple++;else if(sl===false)tipoSLA[tp].incumple++;else tipoSLA[tp].noData++;}
+  });
+
+  const t12=ytd.filter(t=>getTipo(t)==='Tipo 1'||getTipo(t)==='Tipo 2');
+  const t12cumple=t12.filter(t=>slaCumplido(t)===true).length;
+  const t12total=t12.filter(t=>slaCumplido(t)!==null).length;
+  const pctT12=t12total>0?(t12cumple/t12total*100):0;
+
+  // Evolución mensual del % SLA
+  const mK=[];
+  for(let m=1;m<=mesActual;m++) mK.push(cy+'-'+String(m).padStart(2,'0'));
+  const monthSLA=mK.map(ms=>{
+    const mt=ytd.filter(t=>t.created_at.startsWith(ms)&&(getTipo(t)==='Tipo 1'||getTipo(t)==='Tipo 2'));
+    const cumple=mt.filter(t=>slaCumplido(t)===true).length;
+    const total=mt.filter(t=>slaCumplido(t)!==null).length;
+    return total>0?(cumple/total*100):null;
+  });
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Acumulado <strong>${cy}</strong> &nbsp;·&nbsp; Ene–${mN[mesActual]} ${cy}</div>
+    <div class="section-header section-gap"><span>📋</span><h2>SLAs — Acumulado ${cy}</h2></div>
+    <div class="kpi-grid kpi-grid-3">
+      <div class="kpi-card orange"><div class="kpi-label">SLA T1+T2 Acum %</div><div class="kpi-value">${pctT12.toFixed(1)}%</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Tickets T1+T2</div><div class="kpi-value">${t12total}</div><div class="kpi-sub">Con datos SLA</div></div>
+      <div class="kpi-card ${pctT12>=62.5?'green':pctT12>=50?'orange':'red'}"><div class="kpi-label">vs Target (62.5%)</div><div class="kpi-value">${(pctT12-62.5).toFixed(1)}pp</div><div class="kpi-sub">Target: 50–75%</div></div>
+    </div>
+
+    <div class="section-header"><span>✅</span><h2>% SLA Cumplido (1ª Respuesta + Sucesivas) — Acumulado</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Target SLA</th><th class="right">Tickets</th><th class="right">Cumplidos</th><th class="right">Incumplidos</th><th class="right">% Cumplimiento</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tipoSLA[tp], tot=d.cumple+d.incumple, pct=tot>0?(d.cumple/tot*100):0;
+        return `<tr><td><strong>${tp}</strong></td><td class="right td-gray">${SLA_TARGET[tp]} min</td>
+          <td class="right">${tot}</td><td class="right td-green">${d.cumple}</td>
+          <td class="right td-red">${d.incumple}</td>
+          <td class="right ${pct>=75?'td-green':pct>=50?'td-orange':'td-red'}">${pct.toFixed(1)}%</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Evolución Mensual % SLA T1+T2</div><div class="chart-container"><canvas id="ch-sla-evo"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Cumplimiento por Tipo — Acumulado</div><div class="chart-container"><canvas id="ch-sla-bar"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-sla-evo'),{type:'line',data:{labels:mK.map(k=>mN[parseInt(k.slice(5,7))]),datasets:[{label:'% SLA T1+T2',data:monthSLA,borderColor:'#27ae60',backgroundColor:'rgba(39,174,96,0.1)',tension:0.3,fill:true,pointRadius:4},{label:'Target 62.5%',data:mK.map(()=>62.5),borderColor:'#e67e22',borderDash:[4,2],pointRadius:0,fill:false},{label:'Mín 50%',data:mK.map(()=>50),borderColor:'#e74c3c',borderDash:[2,2],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10},callback:v=>v+'%'},min:0,max:100}}}});
+  new Chart(document.getElementById('ch-sla-bar'),{type:'bar',data:{labels:tipos,datasets:[{label:'Cumplidos',data:tipos.map(tp=>tipoSLA[tp].cumple),backgroundColor:'#27ae60',borderRadius:3},{label:'Incumplidos',data:tipos.map(tp=>tipoSLA[tp].incumple),backgroundColor:'#e74c3c',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+}
+
+// ─── ÚLTIMO MES — Tickets ─────────────────────────────────────────────────────
+function renderUltTickets(dash) {
+  document.getElementById('view-title').textContent='Tickets — Último Mes Cerrado';
+  const pm=prevMonth(), ppm_d=new Date(); ppm_d.setMonth(ppm_d.getMonth()-2);
+  const ppm=ppm_d.toISOString().slice(0,7);
+  const cur=byMonth(allTickets,pm), prev=byMonth(allTickets,ppm);
+  const c=cur.length, p=prev.length, cr=cur.filter(resolved).length, pr=prev.filter(resolved).length;
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const pmLbl=mN[parseInt(pm.slice(5,7))]+' '+pm.slice(0,4);
+  const desvC=c-STD_MES, desvR=cr-STD_MES;
+  const pCA=p>0?(c-p)/p*100:0, pRA=pr>0?(cr-pr)/pr*100:0;
+
+  const daily={};
+  cur.forEach(t=>{const d=t.created_at.slice(8,10);daily[d]=(daily[d]||0)+1;});
+  const days=Object.keys(daily).sort();
+  const stCnt={};cur.forEach(t=>{stCnt[t.status]=(stCnt[t.status]||0)+1;});
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tCnt={};tipos.forEach(t=>tCnt[t]=0);
+  cur.forEach(t=>{const tp=getTipo(t);if(tCnt[tp]!==undefined)tCnt[tp]++;});
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Último mes cerrado: <strong>${pmLbl}</strong></div>
+    <div class="section-header section-gap"><span>📋</span><h2>Tickets — ${pmLbl}</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">Creados</div><div class="kpi-value">${c}</div><div class="kpi-sub">Std: ${STD_MES}</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resueltos</div><div class="kpi-value">${cr}</div><div class="kpi-sub">Std: ${STD_MES}</div></div>
+      <div class="kpi-card ${desvC>=0?'orange':'red'}"><div class="kpi-label">Desv. Creados</div><div class="kpi-value">${desvC>0?'+':''}${desvC}</div><div class="kpi-sub">vs std ${STD_MES}</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">% Resolución</div><div class="kpi-value">${c>0?(cr/c*100).toFixed(1):0}%</div><div class="kpi-sub">Resueltos / Creados</div></div>
+    </div>
+    <div class="section-header"><span>📋</span><h2>Detalle vs Mes Anterior</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Métrica</th><th class="right">${pmLbl}</th><th class="right">Std Mes</th><th class="right">Desv.</th><th class="right">Mes Anterior</th><th class="right">% vs Ant.</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Creados</strong></td><td class="right">${c}</td><td class="right td-gray">${STD_MES}</td>
+          <td class="right ${desvC<0?'td-red':'td-green'}">${desvC>0?'+':''}${desvC}</td>
+          <td class="right">${p}</td><td class="right ${pctCls(pCA)}">${pctStr(pCA)}</td></tr>
+        <tr><td><strong>Resueltos</strong></td><td class="right">${cr}</td><td class="right td-gray">${STD_MES}</td>
+          <td class="right ${desvR<0?'td-red':'td-green'}">${desvR>0?'+':''}${desvR}</td>
+          <td class="right">${pr}</td><td class="right ${pctCls(pRA)}">${pctStr(pRA)}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Evolución Diaria</div><div class="chart-container"><canvas id="ch-ult-daily"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Por Tipo de Cliente</div><div class="chart-container"><canvas id="ch-ult-tipo"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-ult-daily'),{type:'bar',data:{labels:days.map(d=>parseInt(d)),datasets:[{label:'Tickets',data:days.map(d=>daily[d]),backgroundColor:'#1e3a6e',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+  new Chart(document.getElementById('ch-ult-tipo'),{type:'doughnut',data:{labels:tipos,datasets:[{data:tipos.map(t=>tCnt[t]),backgroundColor:['#1e3a6e','#27ae60','#8e44ad','#8899bb'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+}
+
+// ─── ÚLTIMO MES — Tiempos ─────────────────────────────────────────────────────
+function renderUltTiempos(dash) {
+  document.getElementById('view-title').textContent='Tiempos — Último Mes Cerrado';
+  const pm=prevMonth();
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const pmLbl=mN[parseInt(pm.slice(5,7))]+' '+pm.slice(0,4);
+  const cur=byMonth(allTickets,pm).filter(t=>metricsById[t.id]);
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tD={};tipos.forEach(tp=>{tD[tp]={fr:[],res:[]};});
+  cur.forEach(t=>{const tp=getTipo(t),fr=getFirstReplyMin(t),res=getResolutionMin(t);if(tD[tp]){if(fr!=null)tD[tp].fr.push(fr);if(res!=null)tD[tp].res.push(res);}});
+  const t1=avg(tD['Tipo 1'].fr), t2=avg(tD['Tipo 2'].fr), resT1=avg(tD['Tipo 1'].res);
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Último mes cerrado: <strong>${pmLbl}</strong> &nbsp;·&nbsp; Tickets con métricas: <strong>${cur.length}</strong></div>
+    <div class="section-header section-gap"><span>⏱️</span><h2>Tiempos — ${pmLbl}</h2></div>
+    <div class="kpi-grid">
+      <div class="kpi-card blue"><div class="kpi-label">T. Medio T1 (min)</div><div class="kpi-value">${t1!=null?t1.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">T. Medio T2 (min)</div><div class="kpi-value">${t2!=null?t2.toFixed(1):'—'}</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Resolución T1 (min)</div><div class="kpi-value">${resT1!=null?resT1.toFixed(1):'—'}</div><div class="kpi-sub">Tiempo total medio</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Total Tickets</div><div class="kpi-value">${cur.length}</div><div class="kpi-sub">Con métricas</div></div>
+    </div>
+    <div class="section-header"><span>📋</span><h2>1ª Respuesta por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Tickets</th><th class="right">T. Medio (min)</th><th class="right">Target SLA</th><th class="right">% Cumple</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tD[tp], a=avg(d.fr), tgt=SLA_TARGET[tp];
+        const cumple=d.fr.filter(v=>v<=tgt).length;
+        const pct=d.fr.length>0?(cumple/d.fr.length*100).toFixed(1):'—';
+        return `<tr><td><strong>${tp}</strong></td><td class="right">${d.fr.length}</td>
+          <td class="right ${a!=null&&a<=tgt?'td-green':'td-red'}">${a!=null?a.toFixed(1):'—'}</td>
+          <td class="right td-gray">${tgt} min</td>
+          <td class="right ${pct!=='—'?(parseFloat(pct)>=50?'td-green':'td-red'):'td-gray'}">${pct!=='—'?pct+'%':'—'}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    <div class="section-header"><span>📋</span><h2>Resolución Total por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Resueltos</th><th class="right">Resol. Media (min)</th><th class="right">Resol. Media (h)</th></tr></thead>
+      <tbody>${tipos.map(tp=>{const d=tD[tp],a=avg(d.res);return `<tr><td><strong>${tp}</strong></td><td class="right">${d.res.length}</td><td class="right td-blue">${a!=null?a.toFixed(1):'—'}</td><td class="right td-gray">${a!=null?(a/60).toFixed(1)+'h':'—'}</td></tr>`;}).join('')}</tbody>
+    </table></div>`;
+}
+
+// ─── ÚLTIMO MES — SLAs ────────────────────────────────────────────────────────
+function renderUltSlas(dash) {
+  document.getElementById('view-title').textContent='SLAs — Último Mes Cerrado';
+  const pm=prevMonth();
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const pmLbl=mN[parseInt(pm.slice(5,7))]+' '+pm.slice(0,4);
+  const cur=byMonth(allTickets,pm);
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tSLA={};tipos.forEach(tp=>{tSLA[tp]={cumple:0,incumple:0,noData:0};});
+  cur.forEach(t=>{const tp=getTipo(t),sl=slaCumplido(t);if(tSLA[tp]){if(sl===true)tSLA[tp].cumple++;else if(sl===false)tSLA[tp].incumple++;else tSLA[tp].noData++;}});
+  const t12=cur.filter(t=>getTipo(t)==='Tipo 1'||getTipo(t)==='Tipo 2');
+  const t12c=t12.filter(t=>slaCumplido(t)===true).length, t12t=t12.filter(t=>slaCumplido(t)!==null).length;
+  const pct=t12t>0?(t12c/t12t*100):0;
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 Último mes cerrado: <strong>${pmLbl}</strong></div>
+    <div class="section-header section-gap"><span>✅</span><h2>SLAs — ${pmLbl}</h2></div>
+    <div class="kpi-grid kpi-grid-2">
+      <div class="kpi-card orange"><div class="kpi-label">SLA T1+T2 %</div><div class="kpi-value">${pct.toFixed(1)}%</div><div class="kpi-sub">1ª resp + sucesivas</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Tickets T1+T2</div><div class="kpi-value">${t12t}</div><div class="kpi-sub">Con datos SLA</div></div>
+    </div>
+    <div class="section-header"><span>✅</span><h2>% SLA Cumplido por Tipo</h2></div>
+    <div class="table-wrap section-gap"><table>
+      <thead><tr><th>Tipo</th><th class="right">Target SLA</th><th class="right">Tickets</th><th class="right">Cumplidos</th><th class="right">Incumplidos</th><th class="right">% Cumplimiento</th></tr></thead>
+      <tbody>${tipos.map(tp=>{
+        const d=tSLA[tp], tot=d.cumple+d.incumple, p2=tot>0?(d.cumple/tot*100):0;
+        return `<tr><td><strong>${tp}</strong></td><td class="right td-gray">${SLA_TARGET[tp]} min</td>
+          <td class="right">${tot}</td><td class="right td-green">${d.cumple}</td>
+          <td class="right td-red">${d.incumple}</td>
+          <td class="right ${p2>=75?'td-green':p2>=50?'td-orange':'td-red'}">${p2.toFixed(1)}%</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+// ─── POR CANAL ────────────────────────────────────────────────────────────────
+function renderPorCanal(dash) {
+  document.getElementById('view-title').textContent='Tickets por Canal — Mes Actual';
+  const cur=byMonth(allTickets,curMonth());
+  const counts={};cur.forEach(t=>{const c=getCanal(t);counts[c]=(counts[c]||0)+1;});
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const cColors=['#1e3a6e','#27ae60','#8e44ad','#e67e22','#e74c3c','#8899bb'];
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 <strong>${curMonth()}</strong> &nbsp;·&nbsp; Total: <strong>${cur.length}</strong> tickets</div>
+    <div class="section-header section-gap"><span>📡</span><h2>Distribución por Canal</h2></div>
+    <div class="kpi-grid">${sorted.slice(0,4).map(([c,n],i)=>`<div class="kpi-card blue"><div class="kpi-label">${c}</div><div class="kpi-value" style="color:${cColors[i]}">${n}</div><div class="kpi-sub">${(n/cur.length*100).toFixed(1)}% del total</div></div>`).join('')}</div>
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Tickets por Canal</div><div class="chart-container"><canvas id="ch-canal-bar"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Distribución %</div><div class="chart-container"><canvas id="ch-canal-pie"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-canal-bar'),{type:'bar',data:{labels:sorted.map(x=>x[0]),datasets:[{label:'Tickets',data:sorted.map(x=>x[1]),backgroundColor:sorted.map((_,i)=>cColors[i]||'#ccc'),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'#f0f2f7'},ticks:{font:{size:11}}}}}});
+  new Chart(document.getElementById('ch-canal-pie'),{type:'doughnut',data:{labels:sorted.map(x=>x[0]),datasets:[{data:sorted.map(x=>x[1]),backgroundColor:sorted.map((_,i)=>cColors[i]||'#ccc'),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+}
+
+// ─── POR TIPO ─────────────────────────────────────────────────────────────────
+function renderPorTipo(dash) {
+  document.getElementById('view-title').textContent='Tickets por Tipo de Cliente — Mes Actual';
+  const cur=byMonth(allTickets,curMonth());
+  const tipos=['Tipo 1','Tipo 2','Tipo 3','Sin Tipo'];
+  const tColors={'Tipo 1':'#1e3a6e','Tipo 2':'#27ae60','Tipo 3':'#8e44ad','Sin Tipo':'#8899bb'};
+  const counts={};tipos.forEach(t=>counts[t]=0);
+  cur.forEach(t=>{const tp=getTipo(t);if(counts[tp]!==undefined)counts[tp]++;});
+
+  dash.innerHTML=`
+    <div class="info-bar">📅 <strong>${curMonth()}</strong> &nbsp;·&nbsp; Total: <strong>${cur.length}</strong> tickets</div>
+    <div class="section-header section-gap"><span>🏷️</span><h2>Distribución por Tipo de Cliente</h2></div>
+    <div class="kpi-grid">${tipos.map(tp=>`<div class="kpi-card blue"><div class="kpi-label">${tp}</div><div class="kpi-value" style="color:${tColors[tp]}">${counts[tp]}</div><div class="kpi-sub">${cur.length>0?(counts[tp]/cur.length*100).toFixed(1):0}% del total</div></div>`).join('')}</div>
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">Distribución por Tipo</div><div class="chart-container"><canvas id="ch-tipo-pie"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Tipo vs Estado</div><div class="chart-container"><canvas id="ch-tipo-est"></canvas></div></div>
+    </div>`;
+
+  new Chart(document.getElementById('ch-tipo-pie'),{type:'doughnut',data:{labels:tipos,datasets:[{data:tipos.map(t=>counts[t]),backgroundColor:tipos.map(t=>tColors[t]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+  const sts=['open','pending','solved','closed'], sLbl2={open:'Abierto',pending:'Pendiente',solved:'Resuelto',closed:'Cerrado'}, sC2=['#1e3a6e','#e67e22','#27ae60','#8899bb'];
+  new Chart(document.getElementById('ch-tipo-est'),{type:'bar',data:{labels:tipos,datasets:sts.map((s,i)=>({label:sLbl2[s],data:tipos.map(tp=>cur.filter(t=>getTipo(t)===tp&&t.status===s).length),backgroundColor:sC2[i],borderRadius:3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},y:{stacked:true,grid:{color:'#f0f2f7'},ticks:{font:{size:10}}}}}});
+}
+
+// ─── DATOS DIRECCIÓN ──────────────────────────────────────────────────────────
+function renderDireccion(dash) {
+  document.getElementById('view-title').textContent='Datos Dirección — Visión Semanal';
+
+  // ── Helpers de semana ────────────────────────────────────────────────────────
+  function getWeekBounds(weeksAgo) {
+    const d = new Date();
+    const day = d.getDay() || 7;
+    // lunes de la semana actual
+    const monCur = new Date(d); monCur.setDate(d.getDate() - day + 1); monCur.setHours(0,0,0,0);
+    // lunes de la semana objetivo
+    const mon = new Date(monCur); mon.setDate(monCur.getDate() - weeksAgo * 7);
+    const fri = new Date(mon); fri.setDate(mon.getDate() + 4); fri.setHours(23,59,59,999);
+    return { mon, fri };
+  }
+
+  function ticketsInWeek(tickets, weeksAgo) {
+    const { mon, fri } = getWeekBounds(weeksAgo);
+    return tickets.filter(t => {
+      const d = new Date(t.created_at);
+      return d >= mon && d <= fri;
+    });
+  }
+
+  function isTelefono(t) {
+    const f = (t.custom_fields||[]).find(x => x.id === 19083748389789);
+    return f && f.value === 'canal_telefono';
+  }
+
+  // SLA helpers
+  function slaWeek(tickets) {
+    const t12 = tickets.filter(t => getTipo(t)==='Tipo 1'||getTipo(t)==='Tipo 2');
+    const withData = t12.filter(t => slaCumplido(t) !== null);
+    const cumple = withData.filter(t => slaCumplido(t) === true).length;
+    return withData.length > 0 ? cumple/withData.length*100 : null;
+  }
+  function slaWeekTipo(tickets, tipo) {
+    const t = tickets.filter(x => getTipo(x)===tipo);
+    const withData = t.filter(x => slaCumplido(x) !== null);
+    const cumple = withData.filter(x => slaCumplido(x) === true).length;
+    return withData.length > 0 ? cumple/withData.length*100 : null;
+  }
+  function avgFRTipo(tickets, tipo) {
+    const vals = tickets.filter(t=>getTipo(t)===tipo).map(getFirstReplyMin).filter(x=>x!=null);
+    return vals.length>0 ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  }
+
+  // ── Datos semana pasada (1 semana atrás = última completa) ───────────────────
+  const semPas = ticketsInWeek(allTickets, 1);
+  const curMonth_ = curMonth();
+  const curYear_ = curYear();
+  const mesActual_ = parseInt(curMonth_.slice(5,7));
+
+  // Acumulado mes actual
+  const acumMes = allTickets.filter(t => (t.created_at||'').startsWith(curMonth_));
+  // Acumulado año 2026
+  const acumAnio = allTickets.filter(t => (t.created_at||'').startsWith('2026'));
+
+  // SLA semana pasada
+  const slaSemT1 = slaWeekTipo(semPas,'Tipo 1');
+  const slaSemT2 = slaWeekTipo(semPas,'Tipo 2');
+  const slaSemMedia = slaWeek(semPas);
+
+  // SLA acum mes
+  const slaMesT1 = slaWeekTipo(acumMes,'Tipo 1');
+  const slaMesT2 = slaWeekTipo(acumMes,'Tipo 2');
+  const slaMesMedia = slaWeek(acumMes);
+
+  // SLA acum año
+  const slaAnioT1 = slaWeekTipo(acumAnio,'Tipo 1');
+  const slaAnioT2 = slaWeekTipo(acumAnio,'Tipo 2');
+  const slaAnioMedia = slaWeek(acumAnio);
+
+  // Tiempos
+  const tSemT1 = avgFRTipo(semPas,'Tipo 1'), tSemT2 = avgFRTipo(semPas,'Tipo 2');
+  const tMesT1 = avgFRTipo(acumMes,'Tipo 1'), tMesT2 = avgFRTipo(acumMes,'Tipo 2');
+  const tAnioT1 = avgFRTipo(acumAnio,'Tipo 1'), tAnioT2 = avgFRTipo(acumAnio,'Tipo 2');
+
+  // Llamadas salientes — últimas 14 semanas completas
+  const semanas = [];
+  for (let i=14; i>=1; i--) {
+    const wt = ticketsInWeek(allTickets, i);
+    const tel = wt.filter(isTelefono).length;
+    const { mon } = getWeekBounds(i);
+    semanas.push({
+      label: 'S'+( 15-i ),
+      total: wt.length,
+      tel,
+      pct: wt.length>0 ? (tel/wt.length*100) : 0,
+      mon
+    });
+  }
+
+  // Indicadores llamadas
+  const semUlt = semanas[semanas.length-1];
+  const telMes = acumMes.filter(isTelefono).length, totalMes = acumMes.length;
+  const telAnio = acumAnio.filter(isTelefono).length, totalAnio = acumAnio.length;
+  const pctMes = totalMes>0?(telMes/totalMes*100):0;
+  const pctAnio = totalAnio>0?(telAnio/totalAnio*100):0;
+
+  // ── Semáforo SLA ─────────────────────────────────────────────────────────────
+  function slaColor(v) { if(v==null)return '#8899bb'; if(v>=62.5)return '#27ae60'; if(v>=50)return '#e67e22'; return '#e74c3c'; }
+  function slaIndicator(v) {
+    if(v==null) return '<span style="color:#8899bb">—</span>';
+    const col=slaColor(v), arrow=v>=62.5?'↑':v>=50?'→':'↓';
+    return `<span style="color:${col};font-weight:700">${arrow} ${v.toFixed(1)}%</span>`;
+  }
+  function tColor(v, target) { if(v==null)return '#8899bb'; return v<=target?'#27ae60':'#e74c3c'; }
+
+  // Evolución mensual SLA desde enero 2026
+  const mN={1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const slaEvoMonths=[], slaEvoT1=[], slaEvoT2=[], slaEvoMedia=[];
+  for(let m=1;m<=mesActual_;m++){
+    const ms='2026-'+String(m).padStart(2,'0');
+    const mTix=allTickets.filter(t=>(t.created_at||'').startsWith(ms));
+    slaEvoMonths.push(mN[m]);
+    slaEvoT1.push(slaWeekTipo(mTix,'Tipo 1'));
+    slaEvoT2.push(slaWeekTipo(mTix,'Tipo 2'));
+    slaEvoMedia.push(slaWeek(mTix));
+  }
+
+  // Evolución mensual tiempos desde enero 2026
+  const tEvoT1=[], tEvoT2=[];
+  for(let m=1;m<=mesActual_;m++){
+    const ms='2026-'+String(m).padStart(2,'0');
+    const mTix=allTickets.filter(t=>(t.created_at||'').startsWith(ms));
+    tEvoT1.push(avgFRTipo(mTix,'Tipo 1'));
+    tEvoT2.push(avgFRTipo(mTix,'Tipo 2'));
+  }
+
+  const fn = v => v!=null?v.toFixed(1)+'%':'—';
+  const fm = v => v!=null?v.toFixed(1)+' min':'—';
+
+  // Desviaciones SLA (vs standard 62.5%)
+  const SLA_STD = 62.5;
+  function slaDesv(v) { return v != null ? v - SLA_STD : null; }
+  function desvSLA(v) {
+    if (v == null) return '<span class="td-gray">—</span>';
+    const d = v - SLA_STD;
+    const bg = d >= 0 ? '#e8f8f0' : '#fdecea';
+    const col = d >= 0 ? '#27ae60' : '#e74c3c';
+    return `<span style="background:${bg};color:${col};font-weight:700;padding:2px 6px;border-radius:4px">${d>0?'+':''}${d.toFixed(1)}%</span>`;
+  }
+  function desvT(v, target) {
+    if (v == null) return '<span class="td-gray">—</span>';
+    const d = v - target; // positivo = peor (más lento)
+    const bg = d <= 0 ? '#e8f8f0' : '#fdecea';
+    const col = d <= 0 ? '#27ae60' : '#e74c3c';
+    return `<span style="background:${bg};color:${col};font-weight:700;padding:2px 6px;border-radius:4px">${d>0?'+':''}${d.toFixed(1)}</span>`;
+  }
+  function valSLA(v) { return v != null ? `<strong>${v.toFixed(1)}%</strong>` : '<span class="td-gray">—</span>'; }
+  function valT(v) { return v != null ? `<strong>${v.toFixed(1)}</strong>` : '<span class="td-gray">—</span>'; }
+
+  dash.innerHTML=`
+  <div class="info-bar">
+    📊 Vista semanal para Dirección &nbsp;·&nbsp; Standard SLA: <strong>62.5%</strong> &nbsp;·&nbsp; Desviaciones: <span style="color:#27ae60;font-weight:600">verde = mejor que std</span> · <span style="color:#e74c3c;font-weight:600">rojo = peor que std</span>
+  </div>
+
+  <!-- ═══ BLOQUE SLA ════════════════════════════════════════════════════════════ -->
+  <div class="section-header section-gap"><span>✅</span><h2>SLA T1 & T2 — Semana Anterior / Acumulado Mes / Acumulado Año &nbsp;<span style="font-weight:400;font-size:11px;color:#8899bb">Standard = 62.5%</span></h2></div>
+
+  <div class="table-wrap section-gap"><table>
+    <thead><tr>
+      <th>Tipo</th>
+      <th class="right">Standard</th>
+      <th class="right" style="background:#edf5fd">Sem. Anterior</th>
+      <th class="right" style="background:#edf5fd">%desv</th>
+      <th class="right" style="background:#edfaf2">Acumul. Mes</th>
+      <th class="right" style="background:#edfaf2">%desv</th>
+      <th class="right" style="background:#f5eefb">Acum. Año</th>
+      <th class="right" style="background:#f5eefb">%desv</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Tipo 1 (15min)</strong></td>
+        <td class="right td-gray">62.5%</td>
+        <td class="right" style="background:#f5fbff">${valSLA(slaSemT1)}</td>
+        <td class="right" style="background:#f5fbff">${desvSLA(slaSemT1)}</td>
+        <td class="right" style="background:#f5fff8">${valSLA(slaMesT1)}</td>
+        <td class="right" style="background:#f5fff8">${desvSLA(slaMesT1)}</td>
+        <td class="right" style="background:#fbf8ff">${valSLA(slaAnioT1)}</td>
+        <td class="right" style="background:#fbf8ff">${desvSLA(slaAnioT1)}</td>
+      </tr>
+      <tr>
+        <td><strong>Tipo 2 (25min)</strong></td>
+        <td class="right td-gray">62.5%</td>
+        <td class="right" style="background:#f5fbff">${valSLA(slaSemT2)}</td>
+        <td class="right" style="background:#f5fbff">${desvSLA(slaSemT2)}</td>
+        <td class="right" style="background:#f5fff8">${valSLA(slaMesT2)}</td>
+        <td class="right" style="background:#f5fff8">${desvSLA(slaMesT2)}</td>
+        <td class="right" style="background:#fbf8ff">${valSLA(slaAnioT2)}</td>
+        <td class="right" style="background:#fbf8ff">${desvSLA(slaAnioT2)}</td>
+      </tr>
+      <tr style="border-top:2px solid #dde3ee;background:#f8fafd">
+        <td><strong>Average T1+T2</strong></td>
+        <td class="right td-gray">62.5%</td>
+        <td class="right" style="background:#edf5fd">${valSLA(slaSemMedia)}</td>
+        <td class="right" style="background:#edf5fd">${desvSLA(slaSemMedia)}</td>
+        <td class="right" style="background:#edfaf2">${valSLA(slaMesMedia)}</td>
+        <td class="right" style="background:#edfaf2">${desvSLA(slaMesMedia)}</td>
+        <td class="right" style="background:#f5eefb">${valSLA(slaAnioMedia)}</td>
+        <td class="right" style="background:#f5eefb">${desvSLA(slaAnioMedia)}</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <!-- Gráfica SLA evolución mensual -->
+  <div class="chart-card section-gap" style="margin-bottom:24px">
+    <div class="chart-title">Evolución Mensual % SLA — Desde Enero 2026</div>
+    <div class="chart-container" style="height:220px"><canvas id="ch-dir-sla-evo"></canvas></div>
+  </div>
+
+  <!-- ═══ BLOQUE TIEMPOS ════════════════════════════════════════════════════════ -->
+  <div class="section-header section-gap"><span>⏱️</span><h2>Tiempos 1ª Respuesta (min) — Semana Anterior / Acumulado Mes / Acumulado Año</h2></div>
+
+  <div class="table-wrap section-gap"><table>
+    <thead><tr>
+      <th>Tipo</th>
+      <th class="right">Standard</th>
+      <th class="right" style="background:#edf5fd">Sem. Anterior</th>
+      <th class="right" style="background:#edf5fd">%desv</th>
+      <th class="right" style="background:#edfaf2">Acumul. Mes</th>
+      <th class="right" style="background:#edfaf2">%desv</th>
+      <th class="right" style="background:#f5eefb">Acum. Año</th>
+      <th class="right" style="background:#f5eefb">%desv</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Tipo 1 (15min)</strong></td>
+        <td class="right td-gray">15 min</td>
+        <td class="right" style="background:#f5fbff">${valT(tSemT1)}</td>
+        <td class="right" style="background:#f5fbff">${desvT(tSemT1,15)}</td>
+        <td class="right" style="background:#f5fff8">${valT(tMesT1)}</td>
+        <td class="right" style="background:#f5fff8">${desvT(tMesT1,15)}</td>
+        <td class="right" style="background:#fbf8ff">${valT(tAnioT1)}</td>
+        <td class="right" style="background:#fbf8ff">${desvT(tAnioT1,15)}</td>
+      </tr>
+      <tr>
+        <td><strong>Tipo 2 (25min)</strong></td>
+        <td class="right td-gray">25 min</td>
+        <td class="right" style="background:#f5fbff">${valT(tSemT2)}</td>
+        <td class="right" style="background:#f5fbff">${desvT(tSemT2,25)}</td>
+        <td class="right" style="background:#f5fff8">${valT(tMesT2)}</td>
+        <td class="right" style="background:#f5fff8">${desvT(tMesT2,25)}</td>
+        <td class="right" style="background:#fbf8ff">${valT(tAnioT2)}</td>
+        <td class="right" style="background:#fbf8ff">${desvT(tAnioT2,25)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="padding:8px 14px;font-size:10px;color:#8899bb;background:#f8fafd">
+    Standard Tipo 1 = 15 min &nbsp;·&nbsp; Standard Tipo 2 = 25 min &nbsp;·&nbsp; Desviación positiva = más lento que el estándar (peor)
+  </div>
+  </div>
+
+  <!-- Gráfica tiempos evolución mensual -->
+  <div class="chart-card section-gap" style="margin-bottom:24px">
+    <div class="chart-title">Evolución Mensual Tiempos 1ª Respuesta (min) — Desde Enero 2026</div>
+    <div class="chart-container" style="height:220px"><canvas id="ch-dir-t-evo"></canvas></div>
+  </div>
+
+  <!-- ═══ BLOQUE LLAMADAS SALIENTES ════════════════════════════════════════════ -->
+  <div class="section-header section-gap"><span>📞</span><h2>Tickets con Llamadas Telefónicas Salientes — Semanas Completas</h2></div>
+
+  <div class="kpi-grid" style="margin-bottom:24px">
+    <div class="kpi-card orange">
+      <div class="kpi-label">Sem. Última Cerrada</div>
+      <div class="kpi-value">${semUlt.pct.toFixed(1)}%</div>
+      <div class="kpi-sub">${semUlt.tel} llamadas de ${semUlt.total} tickets</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Acum. Mes</div>
+      <div class="kpi-value">${pctMes.toFixed(1)}%</div>
+      <div class="kpi-sub">${telMes} llamadas de ${totalMes} tickets</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">Acum. Año 2026</div>
+      <div class="kpi-value">${pctAnio.toFixed(1)}%</div>
+      <div class="kpi-sub">${telAnio} llamadas de ${totalAnio} tickets</div>
+    </div>
+    <div class="kpi-card ${semUlt.pct>=8?'green':semUlt.pct>=5?'orange':'red'}">
+      <div class="kpi-label">Tendencia</div>
+      <div class="kpi-value">${semanas.length>=2?(semUlt.pct-semanas[semanas.length-2].pct).toFixed(1)+'pp':'—'}</div>
+      <div class="kpi-sub">vs semana anterior</div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:24px">
+    <div class="chart-title">Tickets con Llamadas Salientes vs. Total de Tickets por Semana</div>
+    <div class="chart-container" style="height:240px"><canvas id="ch-dir-llamadas"></canvas></div>
+  </div>
+  `;
+
+  // ── Charts ───────────────────────────────────────────────────────────────────
+
+  // SLA evolución
+  new Chart(document.getElementById('ch-dir-sla-evo'), {
+    type: 'line',
+    data: {
+      labels: slaEvoMonths,
+      datasets: [
+        { label: 'Tipo 1', data: slaEvoT1, borderColor: '#1e3a6e', backgroundColor: 'rgba(30,58,110,0.07)', tension: 0.3, fill: false, pointRadius: 5 },
+        { label: 'Tipo 2', data: slaEvoT2, borderColor: '#8e44ad', backgroundColor: 'transparent', tension: 0.3, fill: false, pointRadius: 5 },
+        { label: 'Media T1+T2', data: slaEvoMedia, borderColor: '#27ae60', backgroundColor: 'rgba(39,174,96,0.07)', tension: 0.3, fill: false, pointRadius: 5, borderWidth: 2 },
+        { label: 'Target 62.5%', data: slaEvoMonths.map(()=>62.5), borderColor: '#e67e22', borderDash: [5,3], pointRadius: 0, fill: false, borderWidth: 1.5 },
+        { label: 'Mín 50%', data: slaEvoMonths.map(()=>50), borderColor: '#e74c3c', borderDash: [3,3], pointRadius: 0, fill: false, borderWidth: 1 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: '#f0f2f7' }, ticks: { font: { size: 11 }, callback: v => v+'%' }, min: 0, max: 100 }
+      }
+    }
+  });
+
+  // Tiempos evolución
+  new Chart(document.getElementById('ch-dir-t-evo'), {
+    type: 'line',
+    data: {
+      labels: slaEvoMonths,
+      datasets: [
+        { label: 'Tipo 1 (target 15min)', data: tEvoT1, borderColor: '#1e3a6e', tension: 0.3, fill: false, pointRadius: 5 },
+        { label: 'Tipo 2 (target 25min)', data: tEvoT2, borderColor: '#8e44ad', tension: 0.3, fill: false, pointRadius: 5 },
+        { label: 'Target T1 (15 min)', data: slaEvoMonths.map(()=>15), borderColor: '#1e3a6e', borderDash: [4,3], pointRadius: 0, fill: false, borderWidth: 1.5 },
+        { label: 'Target T2 (25 min)', data: slaEvoMonths.map(()=>25), borderColor: '#8e44ad', borderDash: [4,3], pointRadius: 0, fill: false, borderWidth: 1.5 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: '#f0f2f7' }, ticks: { font: { size: 11 }, callback: v => v+' min' }, min: 0 }
+      }
+    }
+  });
+
+  // Llamadas salientes — gráfica combinada
+  // Calcular tendencia lineal
+  const n = semanas.length;
+  const pcts = semanas.map(s => s.pct);
+  const xMean = (n-1)/2, yMean = pcts.reduce((a,b)=>a+b,0)/n;
+  const num = pcts.reduce((s,y,i)=>s+(i-xMean)*(y-yMean),0);
+  const den = pcts.reduce((s,_,i)=>s+(i-xMean)**2,0);
+  const slope = den>0?num/den:0, intercept = yMean - slope*xMean;
+  const trend = semanas.map((_,i)=>intercept+slope*i);
+
+  new Chart(document.getElementById('ch-dir-llamadas'), {
+    type: 'bar',
+    data: {
+      labels: semanas.map(s=>s.label),
+      datasets: [
+        { label: 'Total tickets', data: semanas.map(s=>s.total), backgroundColor: '#c8d4e8', borderRadius: 3, yAxisID: 'y' },
+        { label: 'Tickets con llamadas', data: semanas.map(s=>s.tel), backgroundColor: '#1e3a6e', borderRadius: 3, yAxisID: 'y' },
+        { label: '% tickets con llamadas', data: pcts, type: 'line', borderColor: '#e74c3c', pointBackgroundColor: '#e74c3c', tension: 0.3, yAxisID: 'y2', pointRadius: 4, fill: false },
+        { label: 'Tendencia (%)', data: trend, type: 'line', borderColor: '#e67e22', borderDash: [5,3], tension: 0, yAxisID: 'y2', pointRadius: 0, fill: false, borderWidth: 1.5 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#f0f2f7' }, ticks: { font: { size: 10 } }, position: 'left', title: { display: true, text: 'Tickets', font: { size: 10 } } },
+        y2: { ticks: { font: { size: 10 }, callback: v => v.toFixed(1)+'%' }, position: 'right', grid: { display: false }, title: { display: true, text: '%', font: { size: 10 } }, min: 0 }
+      }
+    }
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
