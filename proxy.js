@@ -28,10 +28,39 @@ async function fetchAll(startUrl) {
     const r = await fetch(url, { headers: HEADERS });
     if (!r.ok) throw new Error('Zendesk ' + r.status + ' en ' + url);
     const data = await r.json();
-    // detectar qué campo contiene los items
     const key = Object.keys(data).find(k => Array.isArray(data[k]) && k !== 'facets');
     if (key) items = items.concat(data[key]);
     url = data.next_page || null;
+  }
+  console.log(' -> ' + items.length + ' total');
+  return items;
+}
+
+async function fetchAllIncremental(startTime) {
+  let items = [];
+  let url = BASE + `/incremental/tickets/cursor.json?start_time=${startTime}&per_page=100`;
+  let page = 0;
+  while (url) {
+    page++;
+    process.stdout.write('\r  Pagina ' + page + ' (' + items.length + ' items)...');
+    const r = await fetch(url, { headers: HEADERS });
+    // Rate limit: esperar y reintentar
+    if (r.status === 429) {
+      const retryAfter = parseInt(r.headers.get('retry-after') || '60');
+      console.log(`\n  Rate limit alcanzado. Esperando ${retryAfter}s...`);
+      await new Promise(res => setTimeout(res, retryAfter * 1000));
+      continue; // reintentar la misma URL
+    }
+    if (!r.ok) throw new Error('Zendesk ' + r.status + ' en ' + url);
+    const data = await r.json();
+    if (data.tickets) items = items.concat(data.tickets);
+    if (data.end_of_stream === true) {
+      url = null;
+    } else {
+      url = data.after_url || null;
+    }
+    // Pequeña pausa entre páginas para evitar rate limit
+    if (url) await new Promise(res => setTimeout(res, 500));
   }
   console.log(' -> ' + items.length + ' total');
   return items;
@@ -52,10 +81,14 @@ async function loadAll(force) {
   }
   console.log('\n=== Cargando datos de Zendesk ===');
 
-  console.log('Tickets...');
-  const allTickets = await fetchAll(BASE + '/tickets.json?per_page=100&sort_by=created_at&sort_order=asc');
-  cache.tickets = allTickets.filter(isValidTicket);
-  console.log('Tickets validos: ' + cache.tickets.length + ' (excluidos: ' + (allTickets.length - cache.tickets.length) + ')');
+  console.log('Tickets (exportación incremental - todos los estados)...');
+  // start_time=0 significa desde el principio (epoch unix)
+  // La API incremental devuelve TODOS los tickets: open, pending, hold, solved, closed, deleted
+  const allTickets = await fetchAllIncremental(0);
+  // Filtrar solo tickets (excluir los deleted que vienen con status='deleted')
+  const onlyTickets = allTickets.filter(t => t.status !== 'deleted');
+  cache.tickets = onlyTickets.filter(isValidTicket);
+  console.log('Tickets validos: ' + cache.tickets.length + ' (excluidos deleted/merged: ' + (allTickets.length - cache.tickets.length) + ')');
 
   console.log('Ticket metrics...');
   cache.metrics = await fetchAll(BASE + '/ticket_metrics.json?per_page=100');
@@ -154,3 +187,4 @@ app.listen(process.env.PORT || 3333, () => {
   console.log('Filtro: excluye tickets con tag "closed_by_merge"');
   console.log('Endpoints: /tickets /metrics /all /sample /health /refresh');
 });
+ 
