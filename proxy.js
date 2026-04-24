@@ -72,7 +72,7 @@ let cache = {
   metrics: null,
   loadedAt: null
 };
-const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 horas
 
 async function loadAll(force) {
   const now = Date.now();
@@ -186,5 +186,11 @@ app.listen(process.env.PORT || 3333, () => {
   console.log('Proxy Zendesk activo en http://localhost:3333');
   console.log('Filtro: excluye tickets con tag "closed_by_merge"');
   console.log('Endpoints: /tickets /metrics /all /sample /health /refresh');
+  // Arrancar carga de datos automáticamente al iniciar
+  console.log('Iniciando carga de datos en segundo plano...');
+  loadAll(true).then(() => {
+    console.log('Carga inicial completada.');
+  }).catch(e => {
+    console.error('Error en carga inicial:', e.message);
+  });
 });
- 
