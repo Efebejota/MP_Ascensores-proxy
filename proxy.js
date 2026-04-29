@@ -11,161 +11,202 @@ const EMAIL = 'fbj@mpascensores.com';
 const TOKEN = '3LpjcUPFnB9Fgk7mQwCRcVBHE17rz1GsJhBcZyXK';
 const AUTH = Buffer.from(EMAIL + '/token:' + TOKEN).toString('base64');
 const BASE = 'https://' + SUBDOMAIN + '.zendesk.com/api/v2';
-
 const HEADERS = { 'Authorization': 'Basic ' + AUTH, 'Content-Type': 'application/json' };
 
-function isValidTicket(ticket) {
-  return !(ticket.tags || []).includes('closed_by_merge');
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 horas
+
+function isValidTicket(t) {
+  return !(t.tags || []).includes('closed_by_merge') && t.status !== 'deleted';
 }
+
+// Cache con estado de carga
+let cache = {
+  tickets: [],
+  metrics: [],
+  organizations: [],
+  loadedAt: null,
+  loading: false,
+  loadingStage: 'idle', // idle | tickets | metrics | orgs | done | error
+  ticketsPartial: 0,    // cuántos tickets se han cargado hasta ahora
+  lastError: null
+};
 
 async function fetchAll(startUrl) {
   let items = [];
   let url = startUrl;
-  let page = 0;
   while (url) {
-    page++;
-    process.stdout.write('\r  Pagina ' + page + ' (' + items.length + ' items)...');
     const r = await fetch(url, { headers: HEADERS });
-    if (!r.ok) throw new Error('Zendesk ' + r.status + ' en ' + url);
+    if (r.status === 429) {
+      const wait = parseInt(r.headers.get('retry-after') || '60');
+      console.log(`  Rate limit, esperando ${wait}s...`);
+      await new Promise(res => setTimeout(res, wait * 1000));
+      continue;
+    }
+    if (!r.ok) throw new Error('Zendesk ' + r.status);
     const data = await r.json();
     const key = Object.keys(data).find(k => Array.isArray(data[k]) && k !== 'facets');
     if (key) items = items.concat(data[key]);
     url = data.next_page || null;
+    if (url) await new Promise(res => setTimeout(res, 300));
   }
-  console.log(' -> ' + items.length + ' total');
   return items;
 }
 
-async function fetchAllIncremental(startTime) {
+async function fetchIncremental() {
   let items = [];
-  let url = BASE + `/incremental/tickets/cursor.json?start_time=${startTime}&per_page=100`;
+  let url = BASE + '/incremental/tickets/cursor.json?start_time=0&per_page=100';
   let page = 0;
   while (url) {
     page++;
-    process.stdout.write('\r  Pagina ' + page + ' (' + items.length + ' items)...');
+    if (page % 10 === 0) console.log(`  Tickets: pagina ${page} (${items.length} cargados)...`);
     const r = await fetch(url, { headers: HEADERS });
-    // Rate limit: esperar y reintentar
     if (r.status === 429) {
-      const retryAfter = parseInt(r.headers.get('retry-after') || '60');
-      console.log(`\n  Rate limit alcanzado. Esperando ${retryAfter}s...`);
-      await new Promise(res => setTimeout(res, retryAfter * 1000));
-      continue; // reintentar la misma URL
+      const wait = parseInt(r.headers.get('retry-after') || '60');
+      console.log(`  Rate limit en tickets, esperando ${wait}s...`);
+      await new Promise(res => setTimeout(res, wait * 1000));
+      continue;
     }
-    if (!r.ok) throw new Error('Zendesk ' + r.status + ' en ' + url);
+    if (!r.ok) throw new Error('Zendesk tickets ' + r.status);
     const data = await r.json();
-    if (data.tickets) items = items.concat(data.tickets);
+    if (data.tickets) {
+      items = items.concat(data.tickets);
+      // Actualizar caché parcial para que el dashboard pueda mostrar algo
+      cache.ticketsPartial = items.filter(isValidTicket).length;
+    }
     if (data.end_of_stream === true) {
       url = null;
     } else {
       url = data.after_url || null;
     }
-    // Pequeña pausa entre páginas para evitar rate limit
-    if (url) await new Promise(res => setTimeout(res, 500));
+    if (url) await new Promise(res => setTimeout(res, 300));
   }
-  console.log(' -> ' + items.length + ' total');
   return items;
 }
 
-// Cache
-let cache = {
-  tickets: null,
-  metrics: null,
-  loadedAt: null
-};
-const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 horas
-
-async function loadAll(force) {
-  const now = Date.now();
-  if (!force && cache.tickets && cache.loadedAt && (now - cache.loadedAt < CACHE_TTL)) {
+// Carga en segundo plano — NO bloquea el servidor
+async function loadInBackground(force) {
+  if (cache.loading) {
+    console.log('Ya hay una carga en curso, ignorando.');
     return;
   }
-  console.log('\n=== Cargando datos de Zendesk ===');
+  const now = Date.now();
+  if (!force && cache.loadedAt && (now - cache.loadedAt < CACHE_TTL) && cache.tickets.length > 0) {
+    return;
+  }
 
-  console.log('Tickets (exportación incremental - todos los estados)...');
-  // start_time=0 significa desde el principio (epoch unix)
-  // La API incremental devuelve TODOS los tickets: open, pending, hold, solved, closed, deleted
-  const allTickets = await fetchAllIncremental(0);
-  // Filtrar solo tickets (excluir los deleted que vienen con status='deleted')
-  const onlyTickets = allTickets.filter(t => t.status !== 'deleted');
-  cache.tickets = onlyTickets.filter(isValidTicket);
-  console.log('Tickets validos: ' + cache.tickets.length + ' (excluidos deleted/merged: ' + (allTickets.length - cache.tickets.length) + ')');
+  cache.loading = true;
+  cache.loadingStage = 'tickets';
+  cache.lastError = null;
+  console.log('\n=== Iniciando carga en background ===');
 
-  console.log('Ticket metrics...');
-  cache.metrics = await fetchAll(BASE + '/ticket_metrics.json?per_page=100');
-  console.log('Metrics: ' + cache.metrics.length);
+  try {
+    // 1. Tickets (incremental — trae todos los estados)
+    console.log('Cargando tickets (todos los estados)...');
+    const allTickets = await fetchIncremental();
+    cache.tickets = allTickets.filter(isValidTicket);
+    console.log(`Tickets validos: ${cache.tickets.length}`);
 
-  cache.loadedAt = Date.now();
-  console.log('=== Carga completa ===\n');
+    // 2. Métricas
+    cache.loadingStage = 'metrics';
+    console.log('Cargando métricas...');
+    cache.metrics = await fetchAll(BASE + '/ticket_metrics.json?per_page=100');
+    console.log(`Metricas: ${cache.metrics.length}`);
+
+    // 3. Organizaciones
+    cache.loadingStage = 'orgs';
+    console.log('Cargando organizaciones...');
+    try {
+      const orgs = await fetchAll(BASE + '/organizations.json?per_page=100');
+      const orgById = {};
+      orgs.forEach(o => { orgById[o.id] = o.name; });
+      cache.tickets = cache.tickets.map(t => ({
+        ...t,
+        organization_name: t.organization_id ? (orgById[t.organization_id] || null) : null
+      }));
+      cache.organizations = orgs;
+      console.log(`Organizaciones: ${orgs.length}`);
+    } catch(e) {
+      console.log('Organizaciones: error (no crítico) -', e.message);
+    }
+
+    cache.loadedAt = Date.now();
+    cache.loadingStage = 'done';
+    console.log('=== Carga completa ===\n');
+  } catch(e) {
+    cache.loadingStage = 'error';
+    cache.lastError = e.message;
+    console.error('Error en carga:', e.message);
+  } finally {
+    cache.loading = false;
+  }
 }
 
-// Health
-app.get('/health', async (req, res) => {
+// ── ENDPOINTS ────────────────────────────────────────────────────────────────
+
+app.get('/health', (req, res) => {
   res.json({
     ok: true,
     time: new Date().toISOString(),
-    cachedTickets: cache.tickets ? cache.tickets.length : 0,
-    cachedMetrics: cache.metrics ? cache.metrics.length : 0,
-    cacheAge: cache.loadedAt ? Math.round((Date.now() - cache.loadedAt) / 1000) + 's' : 'none'
+    cachedTickets: cache.tickets.length,
+    cachedMetrics: cache.metrics.length,
+    cacheAge: cache.loadedAt ? Math.round((Date.now() - cache.loadedAt) / 1000) + 's' : 'none',
+    loading: cache.loading,
+    loadingStage: cache.loadingStage,
+    ticketsPartial: cache.ticketsPartial,
+    lastError: cache.lastError
   });
 });
 
-// Tickets
-app.get('/tickets', async (req, res) => {
-  try {
-    await loadAll(req.query.refresh === 'true');
-    let tickets = cache.tickets;
-    if (req.query.month) tickets = tickets.filter(t => (t.created_at||'').startsWith(req.query.month));
-    else if (req.query.year) tickets = tickets.filter(t => (t.created_at||'').startsWith(req.query.year));
-    res.json({ tickets, total: tickets.length, cachedAt: cache.loadedAt });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+app.get('/tickets', (req, res) => {
+  // Responde inmediatamente con lo que haya (aunque esté cargando)
+  if (cache.tickets.length === 0 && !cache.loading) {
+    loadInBackground(false); // disparar carga si no está en curso
+    return res.status(202).json({ error: 'Cargando datos, intenta en unos minutos', loading: true });
+  }
+  let tickets = cache.tickets;
+  if (req.query.month) tickets = tickets.filter(t => (t.created_at||'').startsWith(req.query.month));
+  else if (req.query.year) tickets = tickets.filter(t => (t.created_at||'').startsWith(req.query.year));
+  res.json({ tickets, total: tickets.length, cachedAt: cache.loadedAt, loading: cache.loading });
 });
 
-// Metrics
-app.get('/metrics', async (req, res) => {
-  try {
-    await loadAll(false);
-    res.json({ metrics: cache.metrics, total: cache.metrics.length, cachedAt: cache.loadedAt });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+app.get('/metrics', (req, res) => {
+  if (cache.metrics.length === 0 && !cache.loading) {
+    loadInBackground(false);
+    return res.status(202).json({ error: 'Cargando datos, intenta en unos minutos', loading: true });
+  }
+  res.json({ metrics: cache.metrics, total: cache.metrics.length, cachedAt: cache.loadedAt, loading: cache.loading });
 });
 
-// Todo junto (tickets + metrics combinados por ticket_id)
-app.get('/all', async (req, res) => {
-  try {
-    await loadAll(req.query.refresh === 'true');
-
-    // Indexar metrics por ticket_id
-    const metricsById = {};
-    (cache.metrics || []).forEach(m => { metricsById[m.ticket_id] = m; });
-
-    // Combinar
-    let combined = cache.tickets.map(t => ({
-      ...t,
-      _metrics: metricsById[t.id] || null
-    }));
-
-    if (req.query.month) combined = combined.filter(t => (t.created_at||'').startsWith(req.query.month));
-    else if (req.query.year) combined = combined.filter(t => (t.created_at||'').startsWith(req.query.year));
-
-    res.json({ tickets: combined, total: combined.length, cachedAt: cache.loadedAt });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+app.get('/all', (req, res) => {
+  if (cache.tickets.length === 0 && !cache.loading) {
+    loadInBackground(false);
+    return res.status(202).json({ error: 'Cargando datos, intenta en unos minutos', loading: true });
+  }
+  const metricsById = {};
+  (cache.metrics || []).forEach(m => { metricsById[m.ticket_id] = m; });
+  let combined = cache.tickets.map(t => ({ ...t, _metrics: metricsById[t.id] || null }));
+  if (req.query.month) combined = combined.filter(t => (t.created_at||'').startsWith(req.query.month));
+  else if (req.query.year) combined = combined.filter(t => (t.created_at||'').startsWith(req.query.year));
+  res.json({ tickets: combined, total: combined.length, cachedAt: cache.loadedAt, loading: cache.loading });
 });
 
-// Sample
+app.get('/refresh', (req, res) => {
+  // Dispara recarga en background y responde inmediatamente
+  cache.tickets = [];
+  cache.metrics = [];
+  cache.loadedAt = null;
+  loadInBackground(true);
+  res.json({ ok: true, message: 'Recarga iniciada en background. Consulta /health para ver el progreso.' });
+});
+
 app.get('/sample', async (req, res) => {
   try {
     const r = await fetch(BASE + '/tickets.json?per_page=3&sort_by=created_at&sort_order=desc', { headers: HEADERS });
     const data = await r.json();
-    // Enriquecer con metrics
-    const enriched = await Promise.all((data.tickets||[]).map(async t => {
-      const mr = await fetch(BASE + '/tickets/' + t.id + '/metrics.json', { headers: HEADERS });
-      const md = await mr.json();
-      return { ...t, _metrics: md.ticket_metric || null };
-    }));
-    res.json({ tickets: enriched });
+    res.json({ tickets: data.tickets || [] });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Ticket fields
 app.get('/ticket_fields', async (req, res) => {
   try {
     const r = await fetch(BASE + '/ticket_fields.json', { headers: HEADERS });
@@ -173,24 +214,10 @@ app.get('/ticket_fields', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Refresh forzado
-app.get('/refresh', async (req, res) => {
-  try {
-    cache = { tickets: null, metrics: null, loadedAt: null };
-    await loadAll(true);
-    res.json({ ok: true, tickets: cache.tickets.length, metrics: cache.metrics.length });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
+// ── ARRANCAR ──────────────────────────────────────────────────────────────────
 app.listen(process.env.PORT || 3333, () => {
-  console.log('Proxy Zendesk activo en http://localhost:3333');
-  console.log('Filtro: excluye tickets con tag "closed_by_merge"');
+  console.log('Proxy Zendesk activo en puerto', process.env.PORT || 3333);
   console.log('Endpoints: /tickets /metrics /all /sample /health /refresh');
-  // Arrancar carga de datos automáticamente al iniciar
-  console.log('Iniciando carga de datos en segundo plano...');
-  loadAll(true).then(() => {
-    console.log('Carga inicial completada.');
-  }).catch(e => {
-    console.error('Error en carga inicial:', e.message);
-  });
+  // Lanzar carga en background al arrancar (no bloquea el servidor)
+  loadInBackground(true);
 });
